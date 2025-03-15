@@ -43,7 +43,11 @@ Use the API script to access functionality:
 ```bash
 streamlit run src/app.py
 ```
+![Redact PII App](imgs/demo1.png)
 
+**Results Example** :
+
+![Results](imgs/demo2.png)
 ## Project Structure
 ```
 deployment/     # Deployment configurations for litellm and vllm
