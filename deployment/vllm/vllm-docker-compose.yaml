@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  vllm:
+    container_name: vllm
+    build: .
+    #image: vllm/vllm-openai:latest
+    command: --model Qwen/Qwen2.5-7B-Instruct-AWQ  --dtype half --max-model-len 8192 --enforce-eager --gpu-memory-utilization 0.7
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    ports:
+      - 8000:8000
+    ipc: host # Or define shm-size to allow the container to access the host's shared memory (between processes)
+
+networks:
+  mlek3:
+    external: true

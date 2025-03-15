@@ -1,0 +1,17 @@
+router_settings:
+    enable_pre_call_checks: true
+model_list:
+  - model_name: openai
+    litellm_params:
+      model: openai/gpt-4o-mini                      
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gemini
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+routing_strategy: simple-shuffle
+litellm_settings:
+
+  request_timeout: 1000
+  drop_params: True
+  redact_user_api_key_info: true
