@@ -1,27 +1,101 @@
 import os
 import streamlit as st
+import pandas as pd
 import uuid
 import time
 import cv2
-from PIL import Image
 import tempfile
 import base64
-import io
-from typing import List, Dict, Any
-import threading
+from typing import List, Any
 import torch
 torch.classes.__path__ = [os.path.join(torch.__path__[0], torch.classes.__file__)] 
-
 # or simply:
 torch.classes.__path__ = []
 # Import modules from current codebase
-from du_prompts import EXTRACT_INFOMATION_PROMPT, DETECT_SENSITIVE_PROMPT1, CHECK_SENSITIVE_PROMPT
+from du_prompts import DETECT_SENSITIVE_PROMPT1, CHECK_SENSITIVE_PROMPT
 from markdown import ocr2markdown
 from search import find_sensitive_data_bboxes, mask_sensitive_data
 from process_ocr import convert_pdf_to_images, load_ocr_model, perform_ocr, save_ocr_results_as_json
 from process_llm import call_model_litellm
-from process_presidio import load_analyzer, detect
+from process_presidio import load_analyzer, detect, process_excel_results
 from utils import merge_pdf, process_llm_results, process_llm_to_list
+import openpyxl
+from openpyxl.styles import PatternFill
+
+def save_to_excel_with_highlights(df, sensitive_text_list, output_name):
+    """
+    Saves dataframe to Excel with highlighted sensitive content
+    
+    :param df: DataFrame to save
+    :param sensitive_text_list: List of sensitive text to highlight
+    :param output_name: Name for the output file
+    :return: Path to the saved Excel file
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs("output", exist_ok=True)
+    
+    # Define output path
+    output_path = f"output/highlighted_sensitive_data_{output_name}.xlsx"
+    
+    # Save DataFrame to Excel
+    df.to_excel(output_path, index=False)
+    
+    # Open the workbook and get active sheet
+    workbook = openpyxl.load_workbook(output_path)
+    worksheet = workbook.active
+    
+    # Define highlight fill
+    highlight_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+    
+    # Check each cell for sensitive text and apply highlighting
+    for row_idx, row in enumerate(worksheet.iter_rows(min_row=2), start=2):
+        for col_idx, cell in enumerate(row, start=1):
+            if cell.value and isinstance(cell.value, str):
+                # Check if any sensitive text is in the cell
+                for text in sensitive_text_list:
+                    if text.lower() in cell.value.lower():
+                        cell.fill = highlight_fill
+                        break
+    
+    # Save the modified workbook
+    workbook.save(output_path)
+    return output_path
+
+def process_excel_csv(file_path, analyzer):
+    """
+    Process Excel/CSV file to detect and highlight sensitive information
+    
+    :param file_path: Path to the Excel/CSV file
+    :param analyzer: Presidio analyzer for detecting sensitive information
+    :return: Dictionary containing paths to output files
+    """
+    file_extension = os.path.splitext(file_path)[1].lower()
+    file_name = os.path.basename(file_path).split('.')[0]
+    
+    # Read the file based on extension
+    if file_extension == '.csv':
+        df = pd.read_csv(file_path)
+    else:  # Excel file
+        df = pd.read_excel(file_path)
+    
+    # Convert to markdown for text processing
+    markdown = df.to_markdown(index=False)
+    
+    # Detect sensitive information using Presidio
+    results = detect(text=markdown, analyzer=analyzer)
+    sensitive_text_list = process_excel_results(results)
+    
+    # Sort sensitive text by length (descending) to ensure longer matches are processed first
+    sorted_sensitive_text = sorted(sensitive_text_list, key=len, reverse=True)
+    
+    # Save to Excel with highlighting
+    excel_path = save_to_excel_with_highlights(df, sorted_sensitive_text, file_name)
+    
+    return {
+        'excel_path': excel_path,
+        'sensitive_count': len(sensitive_text_list),
+        'sensitive_items': sensitive_text_list
+    }
 
 # Initialize necessary directories
 os.makedirs("temp", exist_ok=True)
@@ -225,14 +299,15 @@ def main():
     
     llm_model = st.sidebar.selectbox(
         "Select LLM model:",
-        ["openai", "gemini-2.0-flash",],
+        ["openai", "gemini-2.0-flash","local_llm"],
         index=0,
         disabled=(selected_method == "presidio")
     )
     
     # File upload area
-    uploaded_file = st.file_uploader("Upload a PDF document or image", 
-                                    type=["pdf", "jpg", "jpeg", "png"])
+    uploaded_file = st.file_uploader("Upload a PDF document, image, or Excel/CSV file", 
+                                    type=["pdf", "jpg", "jpeg", "png", "csv", "xlsx", "xls"])
+    
     
     if uploaded_file:
         col1, col2 = st.columns(2)
@@ -249,6 +324,12 @@ def main():
             
             if file_extension in ['.jpg', '.jpeg', '.png']:
                 st.image(temp_path, caption="Uploaded Image")
+            elif file_extension in ['.csv', '.xlsx', '.xls']:
+                if file_extension == '.csv':
+                    df = pd.read_csv(temp_path)
+                else:
+                    df = pd.read_excel(temp_path)
+                st.dataframe(df, height=400)
             else:
                 display_pdf(temp_path)
         
@@ -271,51 +352,86 @@ def main():
                     status_text.text(f"Processing: {int(progress * 100)}% complete")
                 
                 try:
-                    # Perform processing in a separate thread
+                    # Process based on file type
+                    start_time = time.time()
                     status_text.text("Processing document...")
                     
-                    # Start document processing
-                    start_time = time.time()
-                    output_path = process_document(
-                        temp_path, 
-                        detection_method=selected_method,
-                        llm_model=llm_model,
-                        temp_dir=temp_dir,
-                        progress_callback=update_progress
-                    )
-                    process_time = time.time() - start_time
+                    # Determine file type
+                    file_extension = os.path.splitext(temp_path)[1].lower()
                     
-                    # Display processed document
-                    status_text.text(f"Processing completed in {process_time:.2f} seconds!")
-                    progress_bar.progress(1.0)
-                    is_image_output = output_path.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff'))
-                    image_extension = os.path.splitext(output_path)[1].lower().replace('.', '')
-                    mime_type = f"image/{image_extension}"
-                    if is_image_output:
-                        st.image(output_path, caption="Redacted Image")
+                    # For Excel/CSV files, use Presidio only
+                    if file_extension in ['.csv', '.xlsx', '.xls']:
+                        # Load analyzer if not loaded already
+                        _, _, analyzer = load_models()
                         
-                        # Create download button for image
-                        with open(output_path, "rb") as file:
+                        # Process the Excel/CSV file
+                        progress_bar.progress(0.3)  # Show some progress
+                        result = process_excel_csv(temp_path, analyzer)
+                        process_time = time.time() - start_time
+                        
+                        # Display results
+                        progress_bar.progress(1.0)
+                        status_text.text(f"Processing completed in {process_time:.2f} seconds!")
+                        
+                        st.write(f"Found {result['sensitive_count']} sensitive items:")
+                        if result['sensitive_count'] > 0:
+                            items_to_show = min(10, len(result['sensitive_items']))
+                            st.write(", ".join(result['sensitive_items'][:items_to_show]) + 
+                                    ("..." if len(result['sensitive_items']) > items_to_show else ""))
+                        
+                        # Create download button for Excel
+                        with open(result['excel_path'], "rb") as file:
                             st.download_button(
-                                label="Download Processed Image",
+                                label="Download Processed Excel File",
                                 data=file,
-                                file_name=f"redacted_{uploaded_file.name}",
-                                mime=mime_type
+                                file_name=f"highlighted_{uploaded_file.name}",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
+                            
+                        st.success(f"Sensitive information has been highlighted in the Excel file. You can download it using the button above.")
                     else:
-                        display_pdf(output_path)
-                    
-                        # Create download button
-                        with open(output_path, "rb") as file:
-                            st.download_button(
-                                label="Download Processed PDF",
-                                data=file,
-                                file_name=f"redacted_{uploaded_file.name}",
-                                mime="application/pdf"
-                            )
+                        # For PDF/images, use the existing process_document function
+                        output_path = process_document(
+                            temp_path, 
+                            detection_method=selected_method,
+                            llm_model=llm_model,
+                            temp_dir=temp_dir,
+                            progress_callback=update_progress
+                        )
+                        
+                        # Display processed document
+                        process_time = time.time() - start_time
+                        status_text.text(f"Processing completed in {process_time:.2f} seconds!")
+                        progress_bar.progress(1.0)
+                        is_image_output = output_path.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.tiff'))
+                        image_extension = os.path.splitext(output_path)[1].lower().replace('.', '')
+                        mime_type = f"image/{image_extension}"
+                        if is_image_output:
+                            st.image(output_path, caption="Redacted Image")
+                            
+                            # Create download button for image
+                            with open(output_path, "rb") as file:
+                                st.download_button(
+                                    label="Download Processed Image",
+                                    data=file,
+                                    file_name=f"redacted_{uploaded_file.name}",
+                                    mime=mime_type
+                                )
+                        else:
+                            display_pdf(output_path)
+                        
+                            # Create download button
+                            with open(output_path, "rb") as file:
+                                st.download_button(
+                                    label="Download Processed PDF",
+                                    data=file,
+                                    file_name=f"redacted_{uploaded_file.name}",
+                                    mime="application/pdf"
+                                )
                     
                 except Exception as e:
                     st.error(f"An error occurred during processing: {str(e)}")
+                    st.exception(e)
     
     # Footer information
     st.markdown("---")

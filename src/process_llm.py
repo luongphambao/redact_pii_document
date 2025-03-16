@@ -85,7 +85,7 @@ def call_model_litellm_vision(prompt:str,image:Image,model_name: str= "openai",t
 if __name__=="__main__":
     #Test call_model_litellm
     import time 
-    document = open("markdowns/tender-documents-tcat-2020-11_page_16.md").read()
+    document = open("Final Sec Attendee List.md").read()
     # extract_infomation_prompt = EXTRACT_INFOMATION_PROMPT.format(document=document)
     # infomation_extracted = call_model_litellm(extract_infomation_prompt,model_name ='openai',temparature=0,json_format=True)
     # print(infomation_extracted)
@@ -96,7 +96,7 @@ if __name__=="__main__":
     pii_detect_prompt = DETECT_SENSITIVE_PROMPT1.format(document=document,key_infomation=infomation_extracted)
     with open("prompt.txt","w") as f:
         f.write(pii_detect_prompt)
-    result = call_model_litellm(pii_detect_prompt,model_name ='gemini',temparature=0)
+    result = call_model_litellm(pii_detect_prompt,model_name ='openai',temparature=0)
     print(result)
     # detect_image_senstive_prompt = """Phân tích tài liệu hình ảnh này và xác định bất kỳ thông tin nào có thể được coi là riêng tư, nhạy cảm, hoặc có thể gây hại nếu bị tiết lộ hoặc sử dụng sai mục đích. Hãy trích xuất tất cả những thông tin này"
 

@@ -38,6 +38,8 @@ Analyze the provided document and identify all instances of sensitive data or Pe
 
 **1. Extract ALL Sensitive Data & PII**  
 - Identify every occurrence of sensitive data or PII exactly as it appears in the document.  
+    Example: 
+        Customer ID :  SGSIN001 => SGSIN001
 
  **3. Maintain Accuracy & Completeness**  
 - Extract **only** existing PII/sensitive data—do not infer or generate new information.  
@@ -45,10 +47,8 @@ Analyze the provided document and identify all instances of sensitive data or Pe
 **4. Enforce Conciseness**  
 - Typically, sensitive data is **≤3 words** (e.g., names, ID numbers, phone numbers).  
 - If the data spans multiple lines, return each line separately.  
-
  **5. Standardized Output Format**  
 - Each extracted item should be listed **line by line**.  
-- If a single PII/sensitive data spans multiple lines, insert a separator (`----------------`) between each segment.  
 - If no sensitive data is found, return:  `----------------`
 <output>    
 John Doe
@@ -131,67 +131,6 @@ Top Priority: Avoid mistakenly removing PII. It is better to keep non-sensitive 
 Please return extractly output as output format
 Here is a list of extracted sensitive data that needs to be rechecked:
 {sensitive_data}"""
-# DETECT_SENSITIVE_PROMPT = """You are a cybersecurity expert with a deep understanding of document understanding. Your task is to read, analyze, and thoroughly research a document to identify text passages containing sensitive data.
-# Sensitive data includes, but is not limited to, the following types:
-
-# **Personally Identifiable Information (PII):**
-#     -Full name
-#     -Address (home address, email address)
-#     -Phone number
-#     -National ID/Citizen ID number
-#     -Date of birth
-#     -Gender information
-#     -Ethnicity
-#     -Religion
-#     -Images and videos identifying individuals
-#     -IP address
-#     -Location data (GPS)
-#     -Biometric information (fingerprints, facial recognition, iris scans)
-# **Financial Information:**
-#     -Credit card/Debit card number
-#     -Bank account number
-#     -Bank/Financial application password
-#     -Financial transaction history
-#     -Income and asset information
-# **Medical Information:**
-#     -Medical records
-#     -Test results
-#     -Information about medical conditions
-#     -Information about medications being taken
-#     -Health insurance number
-# **Login Information:**
-#     -Username
-#     -Password
-#     -Security questions and answers
-# **Business Confidential Information:**
-#     -Trade secrets
-#     -Information about unreleased products
-#     -Information about customers and partners
-#     -Business strategies
-#     -Proprietary formulas and production processes
-# **Legal Information:**
-#     Contracts
-#     Information about lawsuits
-#     Testimonials
-#     Other legal documents
-# **Internal/Confidential Organization Information:**
-#     Employee information (salary, performance reviews)
-#     Information about organizational structure
-#     Information about IT systems and infrastructure
-
-# **Requirements:**
-# -Read and understand the context of the document to determine whether a text passage contains sensitive data (e.g., a phone number in a company directory may not be sensitive data, but a phone number in a medical record is).
-# Use techniques such as Named Entity Recognition (NER), regular expressions (regex), and other text analysis methods to identify passages that are likely to contain sensitive data.
-# -Mark or extract the text passages containing sensitive data and provide a reason why you identified them as sensitive (e.g., "Credit card number needs to be protected to prevent fraud").
-# -Prioritize searching for variations, for example, phone numbers can be written in different formats.
-# **Output Format:**
-
-# Please return list of sensitive text passages
-# sensitive_text1
-# sensitive_text2
-
-# Here is the content of the document: {document}"""
-
 RECOMMEND_SENSITIVE_PROMPT = """You are a cybersecurity expert tasked with reviewing a document to identify potential sensitive data that should be redacted or protected. Your goal is to recommend the appropriate actions to secure the sensitive information in the document.
 Please recommend potential infomatics that should be redacted or protected based on the following types of sensitive data:"""
 

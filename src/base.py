@@ -11,6 +11,6 @@ client = openai.OpenAI(
     base_url="http://0.0.0.0:4000",
 )
 client_google = openai.OpenAI(
-    api_key=os.getenv("GOOGLE_API_KEY"),
+    api_key=os.getenv("GEMINI_API_KEY"),
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
