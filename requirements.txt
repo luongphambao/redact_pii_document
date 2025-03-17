@@ -23,3 +23,10 @@ SQLAlchemy==2.0.30
 torch==2.3.0
 transformers==4.41.2
 uvicorn==0.29.0
+streamlit==1.43.2
+opencv-python==4.11.0.86
+surya-ocr==0.13.0
+pdf2image
+openai
+presidio_analyzer
+openpyxl
